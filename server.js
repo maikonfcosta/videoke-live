@@ -20,6 +20,7 @@ function getLanIp() {
 // Whitelist de rotas estáticas (sem path traversal)
 const FILES = {
   '/': ['public/index.html', 'text/html; charset=utf-8'],
+  '/sing': ['public/sing.html', 'text/html; charset=utf-8'],
   '/tv': ['public/tv.html', 'text/html; charset=utf-8'],
   '/vendor/qrcode.js': ['public/vendor/qrcode.js', 'text/javascript'],
 };

@@ -21,7 +21,7 @@
     <img src="https://img.shields.io/badge/Node.js-%3E%3D18.0.0-339933?style=for-the-badge&logo=node.js&logoColor=white" alt="Node.js">
     <img src="https://img.shields.io/badge/WebRTC-P2P%20Audio-333333?style=for-the-badge&logo=webrtc&logoColor=white" alt="WebRTC">
     <img src="https://img.shields.io/badge/WebSocket-Native%20ws-010101?style=for-the-badge&logo=socket.io&logoColor=white" alt="WebSocket">
-    <img src="https://img.shields.io/badge/Tests-11%20Passed%20(100%25)-80ed99?style=for-the-badge&logo=vitest&logoColor=black" alt="Tests">
+    <img src="https://img.shields.io/badge/Tests-12%20Passed%20(100%25)-80ed99?style=for-the-badge&logo=vitest&logoColor=black" alt="Tests">
     <img src="https://img.shields.io/badge/License-MIT-ffb703?style=for-the-badge" alt="License">
   </p>
 
@@ -177,10 +177,11 @@ videoke-live/
 │   │   ├── logo.svg         # Logotipo vetorial oficial
 │   │   ├── favicon.svg      # Ícone do navegador
 │   │   └── flow-demo.svg    # Diagrama de arquitetura WebRTC
-│   ├── index.html           # Interface do celular (microfone e fila)
+│   ├── index.html           # Landing Page principal com CTAs e apresentação
+│   ├── sing.html            # Interface do celular (microfone e fila)
 │   └── tv.html              # Interface da TV (player, áudio e pontuação)
 ├── test/
-│   └── karaoke.test.js      # Suíte com 11 testes automatizados (Node Test Runner)
+│   └── karaoke.test.js      # Suíte com 12 testes automatizados (Node Test Runner)
 ├── .gitignore
 ├── LICENSE                  # Licença MIT
 ├── package.json

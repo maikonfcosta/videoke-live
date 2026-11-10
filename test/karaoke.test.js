@@ -53,13 +53,21 @@ after(async () => {
 });
 
 describe('Servidor HTTP e Arquivos Estáticos', () => {
-  test('Rota / responde 200 com Referrer-Policy e HTML', async () => {
+  test('Rota / responde 200 com Referrer-Policy e Landing Page', async () => {
     const res = await fetch(`${baseUrl}/`);
     assert.equal(res.status, 200);
     assert.match(res.headers.get('content-type'), /text\/html/);
     assert.equal(res.headers.get('referrer-policy'), 'strict-origin-when-cross-origin');
     const text = await res.text();
-    assert.ok(text.includes('VIDEOKÊ') || text.includes('Entrar'));
+    assert.ok(text.includes('VIDEOKÊ') && text.includes('Abrir Palco na TV'));
+  });
+
+  test('Rota /sing responde 200 com interface do microfone', async () => {
+    const res = await fetch(`${baseUrl}/sing`);
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get('content-type'), /text\/html/);
+    const text = await res.text();
+    assert.ok(text.includes('Entrar e ligar o microfone'));
   });
 
   test('Rota /tv responde 200 com HTML da TV', async () => {

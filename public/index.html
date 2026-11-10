@@ -1,209 +1,546 @@
 <!doctype html>
-<html lang="pt-BR"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>Videokê Live — Microfone do Celular</title>
-<link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
-<style>
-body{margin:0 auto;padding:16px;max-width:480px;font:16px system-ui,sans-serif;background:#1a1033;color:#f5ecff}
-input,button{font:inherit;width:100%;box-sizing:border-box;padding:12px;margin:6px 0;border-radius:10px;border:1px solid #4a3a73;background:#2a1b4d;color:inherit}
-button{background:#ffb703;color:#1a1033;border:0;font-weight:700;cursor:pointer}
-button:active{transform:scale(0.98)}
-.row{display:flex;gap:8px}.row button{width:auto;min-width:56px}
-label{display:block;margin-top:14px;font-size:14px}
-#err{color:#ff8fa3;font-size:14px;margin-top:8px}
-#toast{display:none;background:#ffb703;color:#1a1033;padding:10px 14px;border-radius:8px;font-weight:600;font-size:14px;margin-bottom:12px;text-align:center}
-#singers{font-size:13px;color:#80ed99;margin-top:4px}
-#rtc-status{font-size:12px;color:#a090c0;margin-top:4px}
-
-/* Card de Pontuação no Celular */
-#score-card{display:none;background:linear-gradient(135deg, #2a1b4d 0%, #3e1f6e 100%);border:2px solid #ffb703;border-radius:14px;padding:16px;margin:12px 0;text-align:center;box-shadow:0 6px 20px rgba(255,183,3,.2)}
-#score-card-badge{font-size:20px;font-weight:800;color:#ffb703;margin-bottom:4px}
-#score-card-score{font-size:48px;font-weight:900;color:#fff;line-height:1;margin:6px 0}
-#score-card-details{font-size:14px;color:#bca4e6}
-#score-card-msg{font-size:14px;color:#80ed99;margin-top:6px;font-weight:600}
-</style></head><body>
-<div id="toast"></div>
-<div id="join">
-  <div style="text-align:center;margin-bottom:16px">
-    <img src="/assets/favicon.svg" alt="Videokê Live" style="width:48px;height:48px;vertical-align:middle;margin-bottom:8px">
-    <h2 style="margin:0;font-size:24px;font-weight:900;letter-spacing:1px">VIDEOKÊ <span style="color:#ffb703">LIVE</span></h2>
-    <p style="margin:4px 0 0 0;font-size:13px;color:#a48fd4">Transforme seu celular em microfone sem fio</p>
-  </div>
-  <input id="name" placeholder="Seu nome de cantor" maxlength="20">
-  <input id="room" placeholder="Código da sala (4 letras)" maxlength="4" autocapitalize="characters">
-  <button id="go">Entrar e ligar o microfone</button><p id="err"></p></div>
-<div id="app" hidden>
-  <div id="score-card">
-    <div id="score-card-badge">Show!</div>
-    <div id="score-card-score">0 pts</div>
-    <div id="score-card-details">Cantor • Música</div>
-    <div id="score-card-msg">Parabéns!</div>
-  </div>
-
-  <h3 id="now"></h3>
-  <div id="singers"></div>
-  <div id="rtc-status">Conectando áudio à TV...</div>
-  <div class="row" style="margin-top:12px"><button id="mute">Mic ligado</button><button id="skip">Pular</button></div>
-  <label>Volume da voz na TV<input id="voz" type="range" min="0" max="100" value="100"></label>
-  <label>Volume da música<input id="musica" type="range" min="0" max="100" value="100"></label>
-  <label>Adicionar música (link do YouTube)</label>
-  <div class="row"><input id="link" placeholder="https://youtu.be/..."><button id="add">Adicionar</button></div>
-  <ol id="q"></ol>
-</div>
-<script>
-const $ = i => document.getElementById(i);
-let ws, pc, stream, track, chain = Promise.resolve();
-let pendingIce = [];
-let wakeLock = null;
-let toastTimeout = null;
-
-const tx = m => {
-  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(m));
-};
-
-const showToast = msg => {
-  const t = $('toast');
-  t.textContent = msg;
-  t.style.display = 'block';
-  if (toastTimeout) clearTimeout(toastTimeout);
-  toastTimeout = setTimeout(() => { t.style.display = 'none'; }, 6000);
-};
-
-const ytId = s => (s.match(/(?:youtu\.be\/|v=|embed\/|shorts\/)([\w-]{11})/) || s.trim().match(/^([\w-]{11})$/) || [])[1];
-$('room').value = (new URLSearchParams(location.search).get('sala') || '').toUpperCase();
-$('name').value = localStorage.getItem('nome') || '';
-
-async function acquireWakeLock() {
-  if ('wakeLock' in navigator) {
-    try {
-      wakeLock = await navigator.wakeLock.request('screen');
-    } catch (e) {}
-  }
-}
-
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && !$('app').hidden) {
-    acquireWakeLock();
-  }
-});
-
-$('go').onclick = async () => {
-  $('err').textContent = '';
-  try {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      throw new Error('o microfone requer HTTPS ou localhost no navegador do celular');
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Videokê Live — Seu Karaokê Web em Tempo Real</title>
+  <meta name="description" content="Transforme celulares em microfones sem fio e qualquer TV em Videokê real com WebRTC, músicas do YouTube e pontuação de voz!">
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+  <style>
+    :root {
+      --bg: #0d041a;
+      --card-bg: #1a0d33;
+      --card-border: #382069;
+      --gold: #ffb703;
+      --gold-hover: #e09f00;
+      --cyan: #72efdd;
+      --green: #80ed99;
+      --pink: #ff007f;
+      --text: #f5ecff;
+      --text-muted: #bca4e6;
     }
-    stream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: false, noiseSuppression: true, autoGainControl: false, channelCount: 1 }
-    });
-  } catch (e) {
-    return ($('err').textContent = 'Microfone indisponível: ' + e.message);
-  }
 
-  track = stream.getAudioTracks()[0];
-  localStorage.setItem('nome', $('name').value);
-
-  const wsProto = location.protocol === 'https:' ? 'wss' : 'ws';
-  ws = new WebSocket(`${wsProto}://${location.host}/ws`);
-
-  ws.onopen = () => tx({ t: 'join', room: $('room').value.trim(), name: $('name').value.trim() });
-  ws.onmessage = e => { chain = chain.then(() => onMsg(JSON.parse(e.data))).catch(console.error); };
-  ws.onclose = () => {
-    if (!$('app').hidden) $('now').textContent = 'Desconectado da TV. Recarregue a página.';
-    if (track) track.stop();
-  };
-
-  acquireWakeLock();
-};
-
-async function onMsg(m) {
-  if (m.t === 'error') {
-    if ($('app').hidden) {
-      if (track) track.stop();
-      if (ws) ws.close();
-      $('err').textContent = m.msg;
-    } else {
-      showToast(m.msg);
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: radial-gradient(circle at 50% 0%, #291254 0%, var(--bg) 75%);
+      color: var(--text);
+      line-height: 1.5;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
     }
-  } else if (m.t === 'joined') {
-    $('join').hidden = true;
-    $('app').hidden = false;
-    pendingIce = [];
 
-    pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
-    pc.onicecandidate = e => e.candidate && tx({ t: 'sig', data: { ice: e.candidate } });
+    .container {
+      max-width: 1040px;
+      margin: 0 auto;
+      padding: 0 20px;
+      width: 100%;
+    }
 
-    pc.onconnectionstatechange = () => {
-      const st = pc.connectionState;
-      if (st === 'connected') $('rtc-status').textContent = '● Áudio transmitindo para a TV';
-      else if (st === 'connecting') $('rtc-status').textContent = '○ Conectando áudio à TV...';
-      else if (st === 'failed' || st === 'disconnected') $('rtc-status').textContent = '⚠ Falha na conexão de áudio com a TV';
+    /* Navbar */
+    header {
+      padding: 20px 0;
+      border-bottom: 1px solid rgba(255, 183, 3, 0.15);
+      background: rgba(13, 4, 26, 0.8);
+      backdrop-filter: blur(10px);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .nav-wrapper {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      color: inherit;
+    }
+    .brand img {
+      width: 38px;
+      height: 38px;
+    }
+    .brand h1 {
+      font-size: 20px;
+      font-weight: 900;
+      letter-spacing: 1.5px;
+    }
+    .brand span { color: var(--gold); }
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .nav-btn {
+      text-decoration: none;
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+    .nav-btn-gh {
+      background: #251447;
+      color: var(--text);
+      border: 1px solid var(--card-border);
+    }
+    .nav-btn-gh:hover { background: #351c66; }
+    .nav-btn-coffee {
+      background: #ffdd00;
+      color: #000;
+    }
+    .nav-btn-coffee:hover { background: #e6c700; }
+
+    /* Hero Section */
+    .hero {
+      text-align: center;
+      padding: 60px 0 40px 0;
+    }
+    .badge-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 16px;
+      background: rgba(255, 183, 3, 0.12);
+      border: 1px solid var(--gold);
+      border-radius: 50px;
+      color: var(--gold);
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      margin-bottom: 24px;
+      text-transform: uppercase;
+    }
+    .hero h2 {
+      font-size: clamp(34px, 5vw, 56px);
+      font-weight: 900;
+      line-height: 1.15;
+      margin-bottom: 20px;
+    }
+    .hero h2 span {
+      background: linear-gradient(135deg, #ffe600 0%, var(--gold) 50%, #fb8500 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .hero p {
+      font-size: clamp(16px, 2vw, 20px);
+      color: var(--text-muted);
+      max-width: 720px;
+      margin: 0 auto 36px auto;
+    }
+
+    /* CTA Grid */
+    .cta-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
+      max-width: 680px;
+      margin: 0 auto;
+    }
+    .cta-card {
+      background: var(--card-bg);
+      border: 2px solid var(--card-border);
+      border-radius: 18px;
+      padding: 28px 24px;
+      text-decoration: none;
+      color: inherit;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      transition: all 0.25s ease;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+    }
+    .cta-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+    }
+    .cta-tv {
+      border-color: var(--gold);
+      background: linear-gradient(180deg, #241348 0%, #150a28 100%);
+    }
+    .cta-tv:hover {
+      box-shadow: 0 12px 35px rgba(255, 183, 3, 0.25);
+    }
+    .cta-mic {
+      border-color: var(--green);
+      background: linear-gradient(180deg, #162438 0%, #0d1526 100%);
+    }
+    .cta-mic:hover {
+      box-shadow: 0 12px 35px rgba(128, 237, 153, 0.25);
+    }
+    .cta-icon {
+      font-size: 46px;
+      margin-bottom: 12px;
+    }
+    .cta-title {
+      font-size: 22px;
+      font-weight: 800;
+      margin-bottom: 8px;
+    }
+    .cta-desc {
+      font-size: 14px;
+      color: var(--text-muted);
+      margin-bottom: 18px;
+    }
+    .cta-button {
+      width: 100%;
+      padding: 12px;
+      border-radius: 10px;
+      font-weight: 800;
+      font-size: 15px;
+      border: 0;
+      cursor: pointer;
+    }
+    .btn-gold {
+      background: var(--gold);
+      color: #0d041a;
+    }
+    .btn-green {
+      background: var(--green);
+      color: #0d041a;
+    }
+
+    /* Como Funciona */
+    .section-title {
+      text-align: center;
+      font-size: 28px;
+      font-weight: 800;
+      margin: 60px 0 12px 0;
+    }
+    .section-subtitle {
+      text-align: center;
+      color: var(--text-muted);
+      margin-bottom: 40px;
+      font-size: 16px;
+    }
+    .steps-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 20px;
+      margin-bottom: 60px;
+    }
+    .step-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 24px;
+      text-align: center;
+    }
+    .step-num {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: rgba(255, 183, 3, 0.15);
+      color: var(--gold);
+      font-size: 20px;
+      font-weight: 900;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 16px auto;
+      border: 2px solid var(--gold);
+    }
+    .step-card h4 {
+      font-size: 18px;
+      margin-bottom: 8px;
+    }
+    .step-card p {
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+
+    /* Features Grid */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+      margin-bottom: 60px;
+    }
+    .feat-item {
+      background: rgba(26, 13, 51, 0.6);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      padding: 20px;
+    }
+    .feat-icon {
+      font-size: 28px;
+      margin-bottom: 10px;
+      display: inline-block;
+    }
+    .feat-item h5 {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 6px;
+      color: var(--text);
+    }
+    .feat-item p {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    /* Support Section */
+    .support-box {
+      background: linear-gradient(135deg, #241348 0%, #150a28 100%);
+      border: 2px solid var(--gold);
+      border-radius: 20px;
+      padding: 36px 24px;
+      text-align: center;
+      margin-bottom: 60px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    }
+    .support-box h3 {
+      font-size: 26px;
+      font-weight: 800;
+      margin-bottom: 12px;
+      color: var(--gold);
+    }
+    .support-box p {
+      color: var(--text-muted);
+      max-width: 600px;
+      margin: 0 auto 24px auto;
+      font-size: 15px;
+    }
+    .support-actions {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 16px;
+    }
+    .btn-support {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 24px;
+      border-radius: 10px;
+      font-weight: 700;
+      font-size: 15px;
+      text-decoration: none;
+      cursor: pointer;
+      border: 0;
+      transition: transform 0.2s;
+    }
+    .btn-support:hover { transform: scale(1.03); }
+    .btn-coffee { background: #ffdd00; color: #000; }
+    .btn-pix { background: #32bcad; color: #fff; }
+
+    /* Modal Pix */
+    #pix-modal {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.8);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+    }
+    .pix-content {
+      background: #1a0d33;
+      border: 2px solid #32bcad;
+      border-radius: 16px;
+      padding: 24px;
+      max-width: 420px;
+      width: 90%;
+      text-align: center;
+    }
+    .pix-key-box {
+      background: #0d041a;
+      padding: 12px;
+      border-radius: 8px;
+      font-family: monospace;
+      font-size: 14px;
+      margin: 16px 0;
+      border: 1px dashed #32bcad;
+      word-break: break-all;
+      color: #80ed99;
+    }
+
+    /* Footer */
+    footer {
+      margin-top: auto;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      padding: 24px 0;
+      text-align: center;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    footer a { color: var(--gold); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+  <!-- Redirecionamento Inteligente para quem escanear QR Code com ?sala=XXXX -->
+  <script>
+    (function() {
+      var params = new URLSearchParams(location.search);
+      if (params.has('sala')) {
+        location.href = '/sing' + location.search;
+      }
+    })();
+  </script>
+
+  <!-- Header / Navbar -->
+  <header>
+    <div class="container nav-wrapper">
+      <a href="/" class="brand">
+        <img src="/assets/favicon.svg" alt="Videokê Live">
+        <h1>VIDEOKÊ <span>LIVE</span></h1>
+      </a>
+      <div class="nav-links">
+        <a href="https://github.com/maikonfcosta/videoke-live" target="_blank" class="nav-btn nav-btn-gh">★ GitHub</a>
+        <a href="https://buymeacoffee.com/maikonfcosta" target="_blank" class="nav-btn nav-btn-coffee">☕ Apoiar</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <main class="container">
+    <section class="hero">
+      <div class="badge-pill">🎤 WebRTC P2P • YouTube API • Videokê Score</div>
+      <h2>O Karaokê Definitivo na sua <span>TV &amp; Celular</span></h2>
+      <p>
+        Sem cabos, sem comprar microfones caros e sem instalar aplicativos. A TV toca o vídeo com a letra e os celulares funcionam como microfones de baixíssima latência com pontuação oficial de voz!
+      </p>
+
+      <!-- CTAs de Entrada Rápida -->
+      <div class="cta-grid">
+        <!-- Modo TV -->
+        <a href="/tv" class="cta-card cta-tv">
+          <div class="cta-icon">📺</div>
+          <div class="cta-title">Abrir Palco na TV</div>
+          <div class="cta-desc">Abra no navegador da TV ou notebook ligado via HDMI para gerar a sala e a tela de reprodução.</div>
+          <button class="cta-button btn-gold">Iniciar Modo TV ➔</button>
+        </a>
+
+        <!-- Modo Celular / Cantor -->
+        <a href="/sing" class="cta-card cta-mic">
+          <div class="cta-icon">🎤</div>
+          <div class="cta-title">Entrar como Cantor</div>
+          <div class="cta-desc">Ligue o microfone do seu celular, entre com o código da sala de 4 letras e adicione músicas na fila.</div>
+          <button class="cta-button btn-green">Abrir Microfone ➔</button>
+        </a>
+      </div>
+    </section>
+
+    <!-- Como Funciona -->
+    <section>
+      <h3 class="section-title">Como Funciona em 3 Passos</h3>
+      <p class="section-subtitle">Simples, rápido e feito para animar qualquer reunião de amigos ou família.</p>
+      
+      <div class="steps-grid">
+        <div class="step-card">
+          <div class="step-num">1</div>
+          <h4>Abra a TV</h4>
+          <p>Acesse o Modo TV no navegador da sua Smart TV ou computador. A tela exibirá um código de 4 letras e um QR Code dinâmico.</p>
+        </div>
+        <div class="step-card">
+          <div class="step-num">2</div>
+          <h4>Conecte o Celular</h4>
+          <p>Aponte a câmera do celular para o QR Code. Seu smartphone conecta na hora como um microfone sem fio de alta fidelidade.</p>
+        </div>
+        <div class="step-card">
+          <div class="step-num">3</div>
+          <h4>Cante e Pontue!</h4>
+          <p>Cole o link de qualquer karaokê do YouTube. Ao final de cada canção, a TV analisa sua voz e dá a nota oficial do Videokê!</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Recursos Tecnológicos -->
+    <section>
+      <h3 class="section-title">Tecnologia Feita para Performance</h3>
+      <p class="section-subtitle">Construído do zero para baixa latência e compatibilidade máxima.</p>
+
+      <div class="features-grid">
+        <div class="feat-item">
+          <div class="feat-icon">⚡</div>
+          <h5>WebRTC Audio P2P</h5>
+          <p>Transmissão direta de áudio com atraso imperceptível (&lt; 200ms na rede local), sem passar por intermediários lentos.</p>
+        </div>
+        <div class="feat-item">
+          <div class="feat-icon">📱</div>
+          <h5>Zero Apps / PWA</h5>
+          <p>Não precisa baixar nada da Google Play ou App Store. Roda direto no Safari do iPhone e Chrome do Android.</p>
+        </div>
+        <div class="feat-item">
+          <div class="feat-icon">⭐</div>
+          <h5>Videokê Score Real</h5>
+          <p>Análise vocal via Web Audio API que mede presença vocal, estabilidade de volume e modulação de frequência.</p>
+        </div>
+        <div class="feat-item">
+          <div class="feat-icon">📺</div>
+          <h5>Compatibilidade Smart TV</h5>
+          <p>Código otimizado para Smart TVs antigas, Fire TV Stick (Silk), Google TV ou notebooks conectados via HDMI.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Caixa de Apoio / Buy Me a Coffee / Pix -->
+    <section class="support-box">
+      <h3>💖 Curtiu o Projeto? Apoie o Criador!</h3>
+      <p>
+        O <strong>Videokê Live</strong> é 100% gratuito, sem propagandas e open-source. Se ele animou seu fim de semana ou foi útil para você, considere me pagar um cafézinho para ajudar nos custos de servidores e desenvolvimento!
+      </p>
+      <div class="support-actions">
+        <a href="https://buymeacoffee.com/maikonfcosta" target="_blank" class="btn-support btn-coffee">
+          ☕ Buy Me a Coffee
+        </a>
+        <button id="btn-show-pix" class="btn-support btn-pix">
+          🇧🇷 Apoiar via Pix
+        </button>
+      </div>
+    </section>
+  </main>
+
+  <!-- Modal Pix -->
+  <div id="pix-modal">
+    <div class="pix-content">
+      <h4 style="color:#32bcad;font-size:20px;margin-bottom:8px">Doação via Pix 🇧🇷</h4>
+      <p style="font-size:13px;color:var(--text-muted)">Qualquer valor ajuda a manter os servidores e a criar novos recursos!</p>
+      <div class="pix-key-box" id="pix-key">maikonfcosta@gmail.com</div>
+      <button id="btn-copy-pix" style="background:#32bcad;color:#fff;border:0;padding:8px 16px;border-radius:6px;font-weight:700;cursor:pointer;margin-bottom:12px">
+        Copiar Chave Pix
+      </button>
+      <br>
+      <button id="btn-close-pix" style="background:transparent;color:var(--text-muted);border:0;font-size:13px;cursor:pointer;text-decoration:underline">
+        Fechar
+      </button>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer>
+    <div class="container">
+      <p>
+        Criado com 💜 por <a href="https://github.com/maikonfcosta" target="_blank"><strong>Maikon Costa</strong></a> •
+        Distribuído sob a Licença <a href="https://github.com/maikonfcosta/videoke-live/blob/main/LICENSE" target="_blank">MIT</a> •
+        <a href="https://github.com/maikonfcosta/videoke-live" target="_blank">Código Fonte no GitHub</a>
+      </p>
+    </div>
+  </footer>
+
+  <script>
+    // Gerenciador do Modal Pix
+    var modal = document.getElementById('pix-modal');
+    document.getElementById('btn-show-pix').onclick = function() { modal.style.display = 'flex'; };
+    document.getElementById('btn-close-pix').onclick = function() { modal.style.display = 'none'; };
+    modal.onclick = function(e) { if (e.target === modal) modal.style.display = 'none'; };
+
+    document.getElementById('btn-copy-pix').onclick = function() {
+      navigator.clipboard.writeText('maikonfcosta@gmail.com').then(function() {
+        document.getElementById('btn-copy-pix').textContent = '✓ Chave Copiada!';
+        setTimeout(function() {
+          document.getElementById('btn-copy-pix').textContent = 'Copiar Chave Pix';
+        }, 3000);
+      });
     };
-
-    pc.addTrack(track, stream);
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    tx({ t: 'sig', data: { sdp: pc.localDescription } });
-  } else if (m.t === 'sig') {
-    if (m.data.sdp) {
-      await pc.setRemoteDescription(new RTCSessionDescription(m.data.sdp));
-      while (pendingIce.length > 0) {
-        const cand = pendingIce.shift();
-        await pc.addIceCandidate(new RTCIceCandidate(cand));
-      }
-    } else if (m.data.ice) {
-      if (pc.remoteDescription && pc.remoteDescription.type) {
-        await pc.addIceCandidate(new RTCIceCandidate(m.data.ice));
-      } else {
-        pendingIce.push(m.data.ice);
-      }
-    }
-  } else if (m.t === 'score') {
-    if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 300]);
-    $('score-card-badge').textContent = m.badge || 'Show!';
-    $('score-card-score').textContent = (m.score || 0) + ' pts';
-    $('score-card-details').textContent = `${m.singer || 'Cantor'} • ${m.title || 'Música'}`;
-    $('score-card-msg').textContent = m.msg || 'Parabéns!';
-    $('score-card').style.display = 'block';
-    setTimeout(() => {
-      $('score-card').style.display = 'none';
-    }, 8000);
-  } else if (m.t === 'state') {
-    $('now').textContent = m.now ? `♪ ${m.now.title} — ${m.now.by}` : 'Nenhuma música tocando';
-    $('q').replaceChildren(...m.queue.map(i => {
-      const li = document.createElement('li');
-      li.textContent = `${i.title} — ${i.by}`;
-      return li;
-    }));
-    if (m.singers) {
-      $('singers').textContent = `Cantores na sala (${m.singers.length}): ` + m.singers.map(s => s.name).join(', ');
-    }
-    if (m.musicaVol != null && document.activeElement !== $('musica')) {
-      $('musica').value = Math.round(m.musicaVol * 100);
-    }
-  } else if (m.t === 'alert') {
-    showToast(m.msg);
-  } else if (m.t === 'bye') {
-    if (track) track.stop();
-    location.reload();
-  }
-}
-
-$('mute').onclick = () => {
-  track.enabled = !track.enabled;
-  $('mute').textContent = track.enabled ? 'Mic ligado' : 'Mic mudo';
-  $('rtc-status').textContent = track.enabled ? '● Áudio transmitindo para a TV' : '○ Microfone silenciado';
-};
-
-$('skip').onclick = () => tx({ t: 'skip' });
-
-for (const k of ['voz', 'musica']) {
-  $(k).oninput = e => tx({ t: 'vol', k, v: e.target.value / 100 });
-}
-
-$('add').onclick = () => {
-  const v = ytId($('link').value);
-  if (!v) return showToast('Link do YouTube inválido');
-  tx({ t: 'add', vid: v });
-  $('link').value = '';
-};
-</script></body></html>
+  </script>
+</body>
+</html>

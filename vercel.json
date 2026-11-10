@@ -1,6 +1,7 @@
 {
   "cleanUrls": true,
   "rewrites": [
+    { "source": "/sing", "destination": "/sing.html" },
     { "source": "/tv", "destination": "/tv.html" },
     { "source": "/vendor/qrcode.js", "destination": "/vendor/qrcode.js" }
   ]

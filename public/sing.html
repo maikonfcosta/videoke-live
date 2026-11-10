@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Videokê Live — Microfone do Celular</title>
+<link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+<style>
+body{margin:0 auto;padding:16px;max-width:480px;font:16px system-ui,sans-serif;background:#1a1033;color:#f5ecff}
+input,button{font:inherit;width:100%;box-sizing:border-box;padding:12px;margin:6px 0;border-radius:10px;border:1px solid #4a3a73;background:#2a1b4d;color:inherit}
+button{background:#ffb703;color:#1a1033;border:0;font-weight:700;cursor:pointer}
+button:active{transform:scale(0.98)}
+.row{display:flex;gap:8px}.row button{width:auto;min-width:56px}
+label{display:block;margin-top:14px;font-size:14px}
+#err{color:#ff8fa3;font-size:14px;margin-top:8px}
+#toast{display:none;background:#ffb703;color:#1a1033;padding:10px 14px;border-radius:8px;font-weight:600;font-size:14px;margin-bottom:12px;text-align:center}
+#singers{font-size:13px;color:#80ed99;margin-top:4px}
+#rtc-status{font-size:12px;color:#a090c0;margin-top:4px}
+
+/* Card de Pontuação no Celular */
+#score-card{display:none;background:linear-gradient(135deg, #2a1b4d 0%, #3e1f6e 100%);border:2px solid #ffb703;border-radius:14px;padding:16px;margin:12px 0;text-align:center;box-shadow:0 6px 20px rgba(255,183,3,.2)}
+#score-card-badge{font-size:20px;font-weight:800;color:#ffb703;margin-bottom:4px}
+#score-card-score{font-size:48px;font-weight:900;color:#fff;line-height:1;margin:6px 0}
+#score-card-details{font-size:14px;color:#bca4e6}
+#score-card-msg{font-size:14px;color:#80ed99;margin-top:6px;font-weight:600}
+</style></head><body>
+<div id="toast"></div>
+<div id="join">
+  <div style="text-align:center;margin-bottom:16px">
+    <img src="/assets/favicon.svg" alt="Videokê Live" style="width:48px;height:48px;vertical-align:middle;margin-bottom:8px">
+    <h2 style="margin:0;font-size:24px;font-weight:900;letter-spacing:1px">VIDEOKÊ <span style="color:#ffb703">LIVE</span></h2>
+    <p style="margin:4px 0 0 0;font-size:13px;color:#a48fd4">Transforme seu celular em microfone sem fio</p>
+  </div>
+  <input id="name" placeholder="Seu nome de cantor" maxlength="20">
+  <input id="room" placeholder="Código da sala (4 letras)" maxlength="4" autocapitalize="characters">
+  <button id="go">Entrar e ligar o microfone</button><p id="err"></p></div>
+<div id="app" hidden>
+  <div id="score-card">
+    <div id="score-card-badge">Show!</div>
+    <div id="score-card-score">0 pts</div>
+    <div id="score-card-details">Cantor • Música</div>
+    <div id="score-card-msg">Parabéns!</div>
+  </div>
+
+  <h3 id="now"></h3>
+  <div id="singers"></div>
+  <div id="rtc-status">Conectando áudio à TV...</div>
+  <div class="row" style="margin-top:12px"><button id="mute">Mic ligado</button><button id="skip">Pular</button></div>
+  <label>Volume da voz na TV<input id="voz" type="range" min="0" max="100" value="100"></label>
+  <label>Volume da música<input id="musica" type="range" min="0" max="100" value="100"></label>
+  <label>Adicionar música (link do YouTube)</label>
+  <div class="row"><input id="link" placeholder="https://youtu.be/..."><button id="add">Adicionar</button></div>
+  <ol id="q"></ol>
+</div>
+<script>
+const $ = i => document.getElementById(i);
+let ws, pc, stream, track, chain = Promise.resolve();
+let pendingIce = [];
+let wakeLock = null;
+let toastTimeout = null;
+
+const tx = m => {
+  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(m));
+};
+
+const showToast = msg => {
+  const t = $('toast');
+  t.textContent = msg;
+  t.style.display = 'block';
+  if (toastTimeout) clearTimeout(toastTimeout);
+  toastTimeout = setTimeout(() => { t.style.display = 'none'; }, 6000);
+};
+
+const ytId = s => (s.match(/(?:youtu\.be\/|v=|embed\/|shorts\/)([\w-]{11})/) || s.trim().match(/^([\w-]{11})$/) || [])[1];
+$('room').value = (new URLSearchParams(location.search).get('sala') || '').toUpperCase();
+$('name').value = localStorage.getItem('nome') || '';
+
+async function acquireWakeLock() {
+  if ('wakeLock' in navigator) {
+    try {
+      wakeLock = await navigator.wakeLock.request('screen');
+    } catch (e) {}
+  }
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && !$('app').hidden) {
+    acquireWakeLock();
+  }
+});
+
+$('go').onclick = async () => {
+  $('err').textContent = '';
+  try {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      throw new Error('o microfone requer HTTPS ou localhost no navegador do celular');
+    }
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: false, noiseSuppression: true, autoGainControl: false, channelCount: 1 }
+    });
+  } catch (e) {
+    return ($('err').textContent = 'Microfone indisponível: ' + e.message);
+  }
+
+  track = stream.getAudioTracks()[0];
+  localStorage.setItem('nome', $('name').value);
+
+  const wsProto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${wsProto}://${location.host}/ws`);
+
+  ws.onopen = () => tx({ t: 'join', room: $('room').value.trim(), name: $('name').value.trim() });
+  ws.onmessage = e => { chain = chain.then(() => onMsg(JSON.parse(e.data))).catch(console.error); };
+  ws.onclose = () => {
+    if (!$('app').hidden) $('now').textContent = 'Desconectado da TV. Recarregue a página.';
+    if (track) track.stop();
+  };
+
+  acquireWakeLock();
+};
+
+async function onMsg(m) {
+  if (m.t === 'error') {
+    if ($('app').hidden) {
+      if (track) track.stop();
+      if (ws) ws.close();
+      $('err').textContent = m.msg;
+    } else {
+      showToast(m.msg);
+    }
+  } else if (m.t === 'joined') {
+    $('join').hidden = true;
+    $('app').hidden = false;
+    pendingIce = [];
+
+    pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+    pc.onicecandidate = e => e.candidate && tx({ t: 'sig', data: { ice: e.candidate } });
+
+    pc.onconnectionstatechange = () => {
+      const st = pc.connectionState;
+      if (st === 'connected') $('rtc-status').textContent = '● Áudio transmitindo para a TV';
+      else if (st === 'connecting') $('rtc-status').textContent = '○ Conectando áudio à TV...';
+      else if (st === 'failed' || st === 'disconnected') $('rtc-status').textContent = '⚠ Falha na conexão de áudio com a TV';
+    };
+
+    pc.addTrack(track, stream);
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    tx({ t: 'sig', data: { sdp: pc.localDescription } });
+  } else if (m.t === 'sig') {
+    if (m.data.sdp) {
+      await pc.setRemoteDescription(new RTCSessionDescription(m.data.sdp));
+      while (pendingIce.length > 0) {
+        const cand = pendingIce.shift();
+        await pc.addIceCandidate(new RTCIceCandidate(cand));
+      }
+    } else if (m.data.ice) {
+      if (pc.remoteDescription && pc.remoteDescription.type) {
+        await pc.addIceCandidate(new RTCIceCandidate(m.data.ice));
+      } else {
+        pendingIce.push(m.data.ice);
+      }
+    }
+  } else if (m.t === 'score') {
+    if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 300]);
+    $('score-card-badge').textContent = m.badge || 'Show!';
+    $('score-card-score').textContent = (m.score || 0) + ' pts';
+    $('score-card-details').textContent = `${m.singer || 'Cantor'} • ${m.title || 'Música'}`;
+    $('score-card-msg').textContent = m.msg || 'Parabéns!';
+    $('score-card').style.display = 'block';
+    setTimeout(() => {
+      $('score-card').style.display = 'none';
+    }, 8000);
+  } else if (m.t === 'state') {
+    $('now').textContent = m.now ? `♪ ${m.now.title} — ${m.now.by}` : 'Nenhuma música tocando';
+    $('q').replaceChildren(...m.queue.map(i => {
+      const li = document.createElement('li');
+      li.textContent = `${i.title} — ${i.by}`;
+      return li;
+    }));
+    if (m.singers) {
+      $('singers').textContent = `Cantores na sala (${m.singers.length}): ` + m.singers.map(s => s.name).join(', ');
+    }
+    if (m.musicaVol != null && document.activeElement !== $('musica')) {
+      $('musica').value = Math.round(m.musicaVol * 100);
+    }
+  } else if (m.t === 'alert') {
+    showToast(m.msg);
+  } else if (m.t === 'bye') {
+    if (track) track.stop();
+    location.reload();
+  }
+}
+
+$('mute').onclick = () => {
+  track.enabled = !track.enabled;
+  $('mute').textContent = track.enabled ? 'Mic ligado' : 'Mic mudo';
+  $('rtc-status').textContent = track.enabled ? '● Áudio transmitindo para a TV' : '○ Microfone silenciado';
+};
+
+$('skip').onclick = () => tx({ t: 'skip' });
+
+for (const k of ['voz', 'musica']) {
+  $(k).oninput = e => tx({ t: 'vol', k, v: e.target.value / 100 });
+}
+
+$('add').onclick = () => {
+  const v = ytId($('link').value);
+  if (!v) return showToast('Link do YouTube inválido');
+  tx({ t: 'add', vid: v });
+  $('link').value = '';
+};
+</script></body></html>
