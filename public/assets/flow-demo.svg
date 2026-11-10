@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 480" width="100%" height="100%">
+  <defs>
+    <linearGradient id="flowBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#150a28" />
+      <stop offset="100%" stop-color="#241445" />
+    </linearGradient>
+    <linearGradient id="tvGlow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffb703" />
+      <stop offset="100%" stop-color="#fb8500" />
+    </linearGradient>
+    <filter id="demoGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="6" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <rect width="1000" height="480" rx="20" fill="url(#flowBg)" stroke="#3f276b" stroke-width="2" />
+
+  <!-- Título do Diagrama de Fluxo -->
+  <text x="500" y="45" text-anchor="middle" font-family="system-ui, sans-serif" font-size="22" font-weight="800" letter-spacing="2" fill="#ffb703">
+    ARQUITETURA &amp; FLUXO DE REPRODUÇÃO EM TEMPO REAL
+  </text>
+  <text x="500" y="70" text-anchor="middle" font-family="system-ui, sans-serif" font-size="14" fill="#a48fd4">
+    Zero fios • Sem instalar aplicativos • Latência &lt; 200ms na rede local
+  </text>
+
+  <!-- BLOCO 1: Celulares dos Cantores (Esquerda) -->
+  <g transform="translate(60, 110)">
+    <!-- Celular Moldura -->
+    <rect width="190" height="300" rx="24" fill="#0d041a" stroke="#80ed99" stroke-width="3" />
+    <rect width="170" height="250" x="10" y="25" rx="14" fill="#1b0d36" />
+    <!-- Entalhe do Celular -->
+    <rect x="75" y="12" width="40" height="6" rx="3" fill="#80ed99" opacity="0.6" />
+
+    <!-- Conteúdo do Celular -->
+    <text x="95" y="60" text-anchor="middle" font-family="system-ui, sans-serif" font-size="14" font-weight="700" fill="#f5ecff">📱 CELULAR (CANTOR)</text>
+    <rect x="25" y="80" width="140" height="28" rx="6" fill="#2a1b4d" stroke="#4a3a73" />
+    <text x="95" y="98" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" fill="#80ed99">● Mic Ligado (WebRTC)</text>
+
+    <!-- Sliders simulados -->
+    <rect x="25" y="125" width="140" height="8" rx="4" fill="#4a3a73" />
+    <circle cx="120" cy="129" r="7" fill="#ffb703" />
+    <text x="25" y="120" font-family="system-ui, sans-serif" font-size="10" fill="#bca4e6">Voz na TV: 80%</text>
+
+    <rect x="25" y="160" width="140" height="8" rx="4" fill="#4a3a73" />
+    <circle cx="140" cy="164" r="7" fill="#72efdd" />
+    <text x="25" y="155" font-family="system-ui, sans-serif" font-size="10" fill="#bca4e6">Música: 100%</text>
+
+    <!-- Fila / Adicionar -->
+    <rect x="25" y="190" width="140" height="30" rx="6" fill="#ffb703" />
+    <text x="95" y="210" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="700" fill="#150a28">+ Adicionar do YouTube</text>
+
+    <!-- Card de Score no Celular -->
+    <rect x="20" y="232" width="150" height="36" rx="8" fill="rgba(255,183,3,0.15)" stroke="#ffb703" stroke-width="1.5" />
+    <text x="95" y="254" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="800" fill="#ffb703">⭐ Nota: 96 pts!</text>
+  </g>
+
+  <!-- LINHAS DE CONEXÃO E FLUXO (Áudio e Sinais) -->
+  <!-- Linha de Áudio WebRTC -->
+  <path d="M 260,190 C 330,170 340,180 410,210" fill="none" stroke="#80ed99" stroke-width="3.5" stroke-dasharray="8 6" filter="url(#demoGlow)" />
+  <rect x="280" y="155" width="125" height="24" rx="12" fill="#0d041a" stroke="#80ed99" stroke-width="1.5" />
+  <text x="342" y="171" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" font-weight="700" fill="#80ed99">
+    🎤 WebRTC Áudio P2P
+  </text>
+
+  <!-- Linha de Sinalização WebSocket -->
+  <path d="M 260,260 C 330,270 340,260 410,270" fill="none" stroke="#72efdd" stroke-width="3" stroke-dasharray="6 4" />
+  <rect x="285" y="280" width="120" height="24" rx="12" fill="#0d041a" stroke="#72efdd" stroke-width="1.5" />
+  <text x="345" y="296" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" font-weight="700" fill="#72efdd">
+    ⚡ WebSocket Fila/Mix
+  </text>
+
+  <!-- BLOCO 2: Servidor Node.js (Centro Superior) -->
+  <g transform="translate(420, 95)">
+    <rect width="160" height="60" rx="12" fill="#1b0d36" stroke="#bca4e6" stroke-width="1.5" />
+    <text x="80" y="28" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="800" fill="#ffffff">SERVIDOR NODE.JS</text>
+    <text x="80" y="46" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" fill="#a48fd4">HTTP / WS / LAN IP</text>
+  </g>
+
+  <!-- BLOCO 3: TV / Display (Direita) -->
+  <g transform="translate(460, 170)">
+    <!-- TV Moldura Externa -->
+    <rect width="470" height="260" rx="16" fill="#0a0314" stroke="#ffb703" stroke-width="4" filter="url(#demoGlow)" />
+    <!-- Tela da TV -->
+    <rect width="446" height="220" x="12" y="12" rx="10" fill="#150a28" />
+    <!-- Base da TV -->
+    <polygon points="205,272 265,272 280,295 190,295" fill="#4a3a73" />
+
+    <!-- Conteúdo da Tela da TV -->
+    <!-- Janela de Vídeo YouTube -->
+    <rect x="26" y="26" width="220" height="150" rx="8" fill="#241445" stroke="#ff007f" stroke-width="1.5" />
+    <polygon points="120,80 150,100 120,120" fill="#ff007f" />
+    <text x="136" y="155" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" fill="#ffffff">♪ YouTube Karaokê</text>
+
+    <!-- Painel de Pontuação Videokê na TV -->
+    <rect x="260" y="26" width="180" height="150" rx="8" fill="rgba(42,27,77,0.85)" stroke="#ffb703" stroke-width="2" />
+    <text x="350" y="52" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="800" fill="#ffe600">PONTUAÇÃO</text>
+    <circle cx="350" cy="95" r="32" fill="#150a28" stroke="#ffb703" stroke-width="3" />
+    <text x="350" y="105" text-anchor="middle" font-family="system-ui, sans-serif" font-size="26" font-weight="900" fill="#ffb703">96</text>
+    <text x="350" y="145" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" font-weight="700" fill="#80ed99">🌟 SUPERSTAR!</text>
+    <text x="350" y="162" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" fill="#ff8fa3">Próxima em 7s...</text>
+
+    <!-- Barra Inferior da TV -->
+    <rect x="26" y="186" width="414" height="34" rx="6" fill="#1a1033" />
+    <text x="40" y="208" font-family="system-ui, sans-serif" font-size="11" fill="#f5ecff">
+      ♪ Evidências (Maikon) • Próximas: Boate Azul • Sala: <tspan fill="#ffb703" font-weight="bold">ABCD</tspan>
+    </text>
+  </g>
+</svg>

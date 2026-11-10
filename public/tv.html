@@ -1,0 +1,532 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>Videokê Live — Tela da TV</title>
+<link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+<style>
+html,body{margin:0;height:100%;background:#1a1033;color:#f5ecff;font:28px/1.3 sans-serif;overflow:hidden}
+#player{position:absolute;top:0;left:0;width:100%;height:100%}
+#ov{position:absolute;top:0;left:0;width:100%;height:100%;z-index:5;background:#1a1033;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+#qr svg{width:240px;height:240px;background:#fff;padding:12px;box-sizing:content-box}
+#code{font-size:88px;font-weight:700;letter-spacing:14px;color:#ffb703}
+#start{font:inherit;margin-top:24px;padding:16px 56px;border:4px solid transparent;border-radius:14px;background:#ffb703;color:#1a1033;font-weight:700;cursor:pointer}
+#start:focus{border-color:#fff;outline:none}
+#warn{color:#ffb703;font-size:22px;margin-top:12px;max-width:85%}
+#singers{color:#80ed99;font-size:20px;margin-top:10px}
+#bar{position:absolute;left:0;bottom:0;width:100%;box-sizing:border-box;padding:12px 28px;background:rgba(26,16,51,.85);font-size:24px;z-index:6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#toast{position:absolute;top:20px;left:50%;transform:translateX(-50%);background:#e63946;color:#fff;padding:12px 24px;border-radius:10px;font-size:22px;z-index:10;display:none;box-shadow:0 4px 15px rgba(0,0,0,.5)}
+
+/* Modal de Pontuação (Videokê Score) */
+#score-modal{position:absolute;top:0;left:0;width:100%;height:100%;z-index:20;background:radial-gradient(circle, rgba(42,27,77,0.96) 0%, rgba(15,8,30,0.98) 100%);display:none;flex-direction:column;align-items:center;justify-content:center;text-align:center;box-sizing:border-box;padding:20px}
+#score-title{font-size:36px;letter-spacing:4px;color:#f5ecff;text-transform:uppercase;margin:0 0 10px 0}
+#score-singer{font-size:32px;color:#80ed99;margin-bottom:6px}
+#score-song{font-size:24px;color:#bca4e6;margin-bottom:20px}
+#score-circle{width:220px;height:220px;border-radius:50%;border:8px solid #ffb703;display:flex;align-items:center;justify-content:center;margin-bottom:20px;box-shadow:0 0 40px rgba(255,183,3,.4);background:rgba(26,16,51,.7)}
+#score-num{font-size:104px;font-weight:900;color:#ffb703;line-height:1}
+#score-badge{font-size:36px;font-weight:700;color:#f5ecff;margin-bottom:8px}
+#score-msg{font-size:24px;color:#f5ecff;max-width:800px;margin-bottom:20px}
+#score-timer{font-size:20px;color:#ff8fa3}
+</style></head><body>
+<div id="player"></div>
+<div id="toast"></div>
+
+<!-- Modal de Pontuação Videokê -->
+<div id="score-modal">
+  <h2 id="score-title">⭐ Pontuação Oficial ⭐</h2>
+  <div id="score-singer">Cantor</div>
+  <div id="score-song">Música</div>
+  <div id="score-circle">
+    <span id="score-num">0</span>
+  </div>
+  <div id="score-badge">Show!</div>
+  <div id="score-msg">Parabéns!</div>
+  <div id="score-timer">Próxima música em 7s...</div>
+</div>
+
+<div id="ov">
+  <div id="qr"></div><div id="code">----</div>
+  <div id="msg"></div>
+  <div id="singers"></div>
+  <div id="warn"></div>
+  <button id="start">Iniciar</button>
+</div>
+<div id="bar"></div>
+<script src="/vendor/qrcode.js"></script>
+<script>
+(function () {
+  var $ = function (i) { return document.getElementById(i); };
+  var ws, room = '----', started = false, ready = false, player, curN = null, now = null, queue = [];
+  var peers = {}, audios = {}, analysers = {}, voz = {}, musica = 100, hasRTC = !!(window.RTCPeerConnection || window.webkitRTCPeerConnection);
+  var ICE = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+  var pendingIce = {};
+  var singersList = [];
+  var toastTimer = null;
+  var audioCtx = null;
+
+  // Métricas para cálculo do score
+  var samplingInterval = null;
+  var totalSamples = 0;
+  var activeVoiceSamples = 0;
+  var volumeSum = 0;
+  var freqVarianceCount = 0;
+  var lastFreqPeak = 0;
+  var scoreCountdownTimer = null;
+
+  function tx(m) {
+    if (ws && ws.readyState === 1) ws.send(JSON.stringify(m));
+  }
+
+  function showToast(msg) {
+    var t = $('toast');
+    t.textContent = msg;
+    t.style.display = 'block';
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () {
+      t.style.display = 'none';
+    }, 6000);
+  }
+
+  function getAudioContext() {
+    if (!audioCtx) {
+      var Ctx = window.AudioContext || window.webkitAudioContext;
+      if (Ctx) audioCtx = new Ctx();
+    }
+    if (audioCtx && audioCtx.state === 'suspended') {
+      audioCtx.resume();
+    }
+    return audioCtx;
+  }
+
+  function playFanfare() {
+    var ctx = getAudioContext();
+    if (!ctx) return;
+    try {
+      var chords = [523.25, 659.25, 783.99, 1046.50]; // Acorde C Maior brilhante
+      chords.forEach(function (freq, i) {
+        var osc = ctx.createOscillator();
+        var g = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.value = freq;
+        var startT = ctx.currentTime + (i * 0.12);
+        g.gain.setValueAtTime(0, startT);
+        g.gain.linearRampToValueAtTime(0.25, startT + 0.04);
+        g.gain.exponentialRampToValueAtTime(0.001, startT + 1.2);
+        osc.connect(g);
+        g.connect(ctx.destination);
+        osc.start(startT);
+        osc.stop(startT + 1.25);
+      });
+    } catch (e) {}
+  }
+
+  function startVoiceSampling() {
+    stopVoiceSampling();
+    totalSamples = 0;
+    activeVoiceSamples = 0;
+    volumeSum = 0;
+    freqVarianceCount = 0;
+    lastFreqPeak = 0;
+
+    samplingInterval = setInterval(function () {
+      if (!now) return;
+      totalSamples++;
+
+      var activeAnalyser = null;
+      for (var id in analysers) {
+        if (analysers[id]) {
+          activeAnalyser = analysers[id];
+          break;
+        }
+      }
+
+      if (!activeAnalyser) return;
+
+      var bufferLength = activeAnalyser.frequencyBinCount;
+      var dataArray = new Uint8Array(bufferLength);
+      activeAnalyser.getByteFrequencyData(dataArray);
+
+      var sum = 0;
+      var peakVal = 0;
+      var peakIdx = 0;
+      for (var i = 0; i < bufferLength; i++) {
+        var val = dataArray[i];
+        sum += val;
+        if (val > peakVal) {
+          peakVal = val;
+          peakIdx = i;
+        }
+      }
+
+      var avgEnergy = sum / bufferLength;
+      volumeSum += avgEnergy;
+
+      // Limiar de detecção vocal
+      if (avgEnergy > 12) {
+        activeVoiceSamples++;
+        if (Math.abs(peakIdx - lastFreqPeak) > 2) {
+          freqVarianceCount++;
+        }
+        lastFreqPeak = peakIdx;
+      }
+    }, 250);
+  }
+
+  function stopVoiceSampling() {
+    if (samplingInterval) {
+      clearInterval(samplingInterval);
+      samplingInterval = null;
+    }
+  }
+
+  function calculateScore() {
+    stopVoiceSampling();
+    var score = 85; // Base inicial
+    var badge = 'Show!';
+    var msg = 'Parabéns pela apresentação!';
+
+    if (totalSamples > 8) {
+      var participationRate = activeVoiceSamples / totalSamples; // % cantando
+      var avgVolume = volumeSum / totalSamples;
+
+      // Cálculo ponderado
+      var base = 50;
+      var participationScore = Math.min(30, participationRate * 40);
+      var dynamicsScore = Math.min(15, (avgVolume / 20) * 15);
+      var varietyScore = Math.min(10, (freqVarianceCount / 10) * 10);
+
+      score = Math.round(base + participationScore + dynamicsScore + varietyScore);
+      if (participationRate < 0.08) {
+        score = Math.max(50, Math.min(68, score - 15));
+      }
+    } else {
+      // Música curta ou pulada: nota aleatória amigável
+      score = 80 + Math.floor(Math.random() * 16);
+    }
+
+    score = Math.min(100, Math.max(50, score));
+
+    if (score >= 95) {
+      badge = '🌟 SUPERSTAR! 🌟';
+      msg = 'Show impecável! O palco é seu!';
+    } else if (score >= 88) {
+      badge = '🎤 MANDOU MUITO BEM! 🎤';
+      msg = 'Afinadíssimo! A galera vibrou junto!';
+    } else if (score >= 78) {
+      badge = '🎶 BOA APRESENTAÇÃO! 🎶';
+      msg = 'Cheio de ritmo e energia! Muito bom!';
+    } else {
+      badge = '🚿 VALEU A CORAGEM! 🚿';
+      msg = 'O importante é a diversão! Mais um ensaio no chuveiro e fica perfeito!';
+    }
+
+    return { score: score, badge: badge, msg: msg };
+  }
+
+  function displayScore(result) {
+    var modal = $('score-modal');
+    $('score-singer').textContent = 'Cantor: ' + (now ? now.by : 'Cantor');
+    $('score-song').textContent = 'Música: ' + (now ? now.title : '');
+    $('score-badge').textContent = result.badge;
+    $('score-msg').textContent = result.msg;
+
+    var targetScore = result.score;
+    var currentNum = 0;
+    $('score-num').textContent = '0';
+    modal.style.display = 'flex';
+    playFanfare();
+
+    // Animação de número subindo
+    var stepTime = Math.max(10, Math.floor(1000 / targetScore));
+    var counterInterval = setInterval(function () {
+      currentNum += 2;
+      if (currentNum >= targetScore) {
+        currentNum = targetScore;
+        clearInterval(counterInterval);
+      }
+      $('score-num').textContent = currentNum;
+    }, stepTime);
+
+    // Contagem regressiva de 7s
+    var secondsLeft = 7;
+    $('score-timer').textContent = 'Próxima música em ' + secondsLeft + 's...';
+    if (scoreCountdownTimer) clearInterval(scoreCountdownTimer);
+    scoreCountdownTimer = setInterval(function () {
+      secondsLeft--;
+      if (secondsLeft <= 0) {
+        clearInterval(scoreCountdownTimer);
+        modal.style.display = 'none';
+      } else {
+        $('score-timer').textContent = 'Próxima música em ' + secondsLeft + 's...';
+      }
+    }, 1000);
+
+    // Notifica o servidor
+    tx({
+      t: 'score',
+      score: targetScore,
+      singer: now ? now.by : 'Cantor',
+      title: now ? now.title : '',
+      badge: result.badge,
+      msg: result.msg
+    });
+  }
+
+  function render() {
+    $('ov').style.display = started && now ? 'none' : 'flex';
+    $('start').style.display = started ? 'none' : 'inline-block';
+    $('code').textContent = room;
+    $('msg').textContent = started ? 'Escaneie o QR code com o celular e adicione uma música' : 'Escaneie o QR code com o celular e pressione OK em Iniciar';
+    $('warn').textContent = hasRTC ? '' : 'Esta TV não suporta voz pelo navegador (sem WebRTC). A música funciona.';
+    
+    if (singersList.length > 0) {
+      $('singers').textContent = '🎤 Cantores conectados (' + singersList.length + '): ' + singersList.map(function (s) { return s.name; }).join(', ');
+    } else {
+      $('singers').textContent = '';
+    }
+
+    $('bar').textContent = (now ? '♪ ' + now.title + ' (' + now.by + ')' : 'Nenhuma música tocando') +
+      (queue.length ? '  •  Próximas: ' + queue.map(function (q) { return q.title; }).join(' / ') : '') +
+      '  •  Sala ' + room + (singersList.length ? ' (' + singersList.length + ' cantores)' : '');
+  }
+
+  function sync() {
+    if (!ready || !started) return;
+    if (!now) {
+      curN = null;
+      stopVoiceSampling();
+      if (player && player.stopVideo) player.stopVideo();
+      return;
+    }
+    if (now.n === curN) return;
+    curN = now.n;
+    $('score-modal').style.display = 'none';
+    if (scoreCountdownTimer) clearInterval(scoreCountdownTimer);
+    startVoiceSampling();
+
+    if (player && player.loadVideoById) {
+      player.loadVideoById(now.vid);
+      player.setVolume(musica);
+      return;
+    }
+
+    player = new YT.Player('player', {
+      width: '100%',
+      height: '100%',
+      videoId: now.vid,
+      playerVars: {
+        autoplay: 1,
+        controls: 0,
+        rel: 0,
+        playsinline: 1,
+        modestbranding: 1,
+        origin: location.origin,
+        enablejsapi: 1
+      },
+      events: {
+        onReady: function (e) {
+          e.target.setVolume(musica);
+          e.target.playVideo();
+        },
+        onStateChange: function (e) {
+          // Quando a música termina no YouTube
+          if (e.data === 0) {
+            var scoreResult = calculateScore();
+            displayScore(scoreResult);
+          }
+        },
+        onError: function (e) {
+          stopVoiceSampling();
+          tx({ t: 'embed_error', code: e.data });
+        }
+      }
+    });
+  }
+
+  window.onYouTubeIframeAPIReady = function () {
+    ready = true;
+    sync();
+  };
+
+  var s = document.createElement('script');
+  s.src = 'https://www.youtube.com/iframe_api';
+  document.head.appendChild(s);
+
+  function peer(id) {
+    if (peers[id]) return peers[id];
+    var PeerClass = window.RTCPeerConnection || window.webkitRTCPeerConnection;
+    var pc = new PeerClass(ICE);
+    if (!pendingIce[id]) pendingIce[id] = [];
+
+    pc.onicecandidate = function (e) {
+      if (e.candidate) tx({ t: 'sig', to: id, data: { ice: e.candidate } });
+    };
+
+    pc.ontrack = function (e) {
+      var a = audios[id] || document.createElement('audio');
+      a.autoplay = true;
+      a.setAttribute('playsinline', '');
+      a.srcObject = e.streams[0];
+      a.volume = voz[id] != null ? voz[id] : 1;
+      audios[id] = a;
+      document.body.appendChild(a);
+
+      // Conecta ao analisador Web Audio
+      try {
+        var ctx = getAudioContext();
+        if (ctx) {
+          var srcNode = ctx.createMediaStreamSource(e.streams[0]);
+          var anNode = ctx.createAnalyser();
+          anNode.fftSize = 512;
+          srcNode.connect(anNode);
+          analysers[id] = anNode;
+        }
+      } catch (err) {}
+
+      if (started) {
+        var p = a.play();
+        if (p && p.catch) p.catch(function () {});
+      }
+    };
+
+    return (peers[id] = pc);
+  }
+
+  function drop(id) {
+    if (peers[id]) {
+      try { peers[id].close(); } catch (e) {}
+      delete peers[id];
+    }
+    if (audios[id]) {
+      if (audios[id].parentNode) {
+        audios[id].parentNode.removeChild(audios[id]);
+      }
+      delete audios[id];
+    }
+    delete analysers[id];
+    delete pendingIce[id];
+  }
+
+  var on = {
+    room: function (m) {
+      room = m.room;
+      now = null;
+      queue = [];
+      singersList = [];
+      for (var id in peers) drop(id);
+
+      var hostUrl = location.origin;
+      if ((location.hostname === 'localhost' || location.hostname === '127.0.0.1') && m.lanIp) {
+        var portStr = m.port ? ':' + m.port : '';
+        hostUrl = location.protocol + '//' + m.lanIp + portStr;
+      }
+
+      var q = qrcode(0, 'M');
+      q.addData(hostUrl + '/?sala=' + room);
+      q.make();
+      $('qr').innerHTML = q.createSvgTag(6, 0);
+      sync();
+      render();
+    },
+    phone: function (m) {
+      render();
+    },
+    left: function (m) {
+      drop(m.id);
+      render();
+    },
+    state: function (m) {
+      now = m.now;
+      queue = m.queue;
+      if (m.singers) singersList = m.singers;
+      if (m.musicaVol != null) {
+        musica = m.musicaVol * 100;
+        if (player && player.setVolume) player.setVolume(musica);
+      }
+      render();
+      sync();
+    },
+    vol: function (m) {
+      if (m.k === 'voz') {
+        voz[m.id] = m.v;
+        if (audios[m.id]) audios[m.id].volume = m.v;
+      } else {
+        musica = m.v * 100;
+        if (player && player.setVolume) player.setVolume(musica);
+      }
+    },
+    alert: function (m) {
+      showToast(m.msg);
+    },
+    sig: function (m) {
+      if (!hasRTC) return;
+      var from = String(m.from);
+      var pc = peer(from);
+      var d = m.data;
+
+      if (!pendingIce[from]) pendingIce[from] = [];
+
+      pc.q = (pc.q || Promise.resolve()).then(function () {
+        if (d.sdp) {
+          var SessionDesc = window.RTCSessionDescription || window.webkitRTCSessionDescription;
+          return pc.setRemoteDescription(new SessionDesc(d.sdp))
+            .then(function () { return pc.createAnswer(); })
+            .then(function (a) { return pc.setLocalDescription(a); })
+            .then(function () {
+              tx({ t: 'sig', to: from, data: { sdp: pc.localDescription } });
+              var queue = pendingIce[from] || [];
+              pendingIce[from] = [];
+              var CandClass = window.RTCIceCandidate || window.webkitRTCIceCandidate;
+              var chain = Promise.resolve();
+              queue.forEach(function (cand) {
+                chain = chain.then(function () {
+                  return pc.addIceCandidate(new CandClass(cand));
+                });
+              });
+              return chain;
+            });
+        }
+        if (d.ice) {
+          var CandClass = window.RTCIceCandidate || window.webkitRTCIceCandidate;
+          if (pc.remoteDescription && pc.remoteDescription.type) {
+            return pc.addIceCandidate(new CandClass(d.ice));
+          } else {
+            pendingIce[from].push(d.ice);
+          }
+        }
+      }).catch(function (err) {
+        console.error('Erro de sinalização WebRTC na TV:', err);
+      });
+    }
+  };
+
+  function connect() {
+    var wsProto = location.protocol === 'https:' ? 'wss://' : 'ws://';
+    ws = new WebSocket(wsProto + location.host + '/ws');
+    ws.onopen = function () {
+      tx({ t: 'host' });
+    };
+    ws.onmessage = function (e) {
+      try {
+        var m = JSON.parse(e.data);
+        if (on[m.t]) on[m.t](m);
+      } catch (err) {}
+    };
+    ws.onclose = function () {
+      setTimeout(connect, 2000);
+    };
+  }
+
+  $('start').onclick = function () {
+    started = true;
+    getAudioContext();
+    for (var id in audios) {
+      var p = audios[id].play();
+      if (p && p.catch) p.catch(function () {});
+    }
+    render();
+    sync();
+  };
+
+  $('start').focus();
+  render();
+  connect();
+})();
+</script></body></html>

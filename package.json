@@ -1,0 +1,35 @@
+{
+  "name": "videoke-live",
+  "version": "1.0.0",
+  "description": "Modern real-time web karaoke system connecting TV and smartphones with WebRTC audio streaming, YouTube backing tracks, shared collaborative queue, and classic Videokê scoring.",
+  "main": "server.js",
+  "private": false,
+  "license": "MIT",
+  "author": "Maikon Costa <maikonfcosta@gmail.com> (https://github.com/maikonfcosta)",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/maikonfcosta/videoke-live.git"
+  },
+  "keywords": [
+    "karaoke",
+    "videoke",
+    "webrtc",
+    "audio-streaming",
+    "youtube-embed",
+    "realtime",
+    "party-game",
+    "smart-tv",
+    "microphone"
+  ],
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "qrcode-generator": "1.4.4",
+    "ws": "8.18.0"
+  }
+}

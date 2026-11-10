@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#150a28" />
+      <stop offset="50%" stop-color="#241445" />
+      <stop offset="100%" stop-color="#0e051d" />
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffe600" />
+      <stop offset="40%" stop-color="#ffb703" />
+      <stop offset="100%" stop-color="#fb8500" />
+    </linearGradient>
+    <linearGradient id="cyanGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#72efdd" />
+      <stop offset="100%" stop-color="#48cae4" />
+    </linearGradient>
+    <linearGradient id="neonPink" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff007f" />
+      <stop offset="100%" stop-color="#7928ca" />
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="8" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- Fundo Circular com Borda Neon -->
+  <rect width="500" height="500" rx="100" fill="url(#bgGrad)" />
+  <rect width="480" height="480" x="10" y="10" rx="90" fill="none" stroke="url(#goldGrad)" stroke-width="4" opacity="0.6" />
+
+  <!-- Ondas de Áudio / Frequência de Som Pulsante -->
+  <g filter="url(#glow)" opacity="0.85">
+    <!-- Círculos concêntricos de som -->
+    <circle cx="250" cy="210" r="140" fill="none" stroke="url(#cyanGrad)" stroke-width="3" stroke-dasharray="16 12" opacity="0.3" />
+    <circle cx="250" cy="210" r="115" fill="none" stroke="url(#neonPink)" stroke-width="3" stroke-dasharray="12 8" opacity="0.5" />
+    <circle cx="250" cy="210" r="90" fill="none" stroke="url(#goldGrad)" stroke-width="3.5" opacity="0.7" />
+  </g>
+
+  <!-- Microfone Clássico / Dinâmico de Palco -->
+  <g transform="translate(250, 210) rotate(-25) translate(-250, -210)">
+    <!-- Cápsula do Microfone -->
+    <rect x="220" y="110" width="60" height="85" rx="30" fill="url(#goldGrad)" filter="url(#glow)" />
+    <!-- Grelha do Microfone com listras -->
+    <line x1="225" y1="135" x2="275" y2="135" stroke="#1a1033" stroke-width="3" stroke-linecap="round" />
+    <line x1="223" y1="150" x2="277" y2="150" stroke="#1a1033" stroke-width="3" stroke-linecap="round" />
+    <line x1="225" y1="165" x2="275" y2="165" stroke="#1a1033" stroke-width="3" stroke-linecap="round" />
+    <line x1="250" y1="115" x2="250" y2="190" stroke="#1a1033" stroke-width="3" stroke-linecap="round" />
+
+    <!-- Anel de Transição -->
+    <rect x="216" y="192" width="68" height="12" rx="4" fill="#f5ecff" />
+
+    <!-- Corpo / Haste do Microfone -->
+    <polygon points="224,204 276,204 266,295 234,295" fill="url(#bgGrad)" stroke="url(#goldGrad)" stroke-width="4" />
+    <!-- Botão On/Off -->
+    <rect x="244" y="225" width="12" height="24" rx="4" fill="url(#cyanGrad)" />
+
+    <!-- Cabo / Base -->
+    <rect x="240" y="295" width="20" height="18" rx="4" fill="#ffb703" />
+  </g>
+
+  <!-- Estrelas / Notas Musicais decorativas -->
+  <text x="100" y="150" font-size="34" fill="#ffe600" opacity="0.9">♪</text>
+  <text x="375" y="140" font-size="42" fill="#72efdd" opacity="0.9">♫</text>
+  <text x="95" y="270" font-size="28" fill="#ff007f" opacity="0.8">★</text>
+  <text x="390" y="260" font-size="32" fill="#ffe600" opacity="0.85">★</text>
+
+  <!-- Tipografia da Marca -->
+  <text x="250" y="395" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="42" font-weight="900" letter-spacing="4" fill="#ffffff" filter="url(#glow)">
+    VIDEOKÊ <tspan fill="url(#goldGrad)">LIVE</tspan>
+  </text>
+  <text x="250" y="430" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="18" font-weight="600" letter-spacing="6" fill="#80ed99">
+    SING • STREAM • SCORE
+  </text>
+</svg>
