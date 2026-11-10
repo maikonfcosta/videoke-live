@@ -21,7 +21,7 @@ function getLanIp() {
 const FILES = {
   '/': ['public/index.html', 'text/html; charset=utf-8'],
   '/tv': ['public/tv.html', 'text/html; charset=utf-8'],
-  '/vendor/qrcode.js': ['node_modules/qrcode-generator/qrcode.js', 'text/javascript'],
+  '/vendor/qrcode.js': ['public/vendor/qrcode.js', 'text/javascript'],
 };
 
 const server = http.createServer((req, res) => {
