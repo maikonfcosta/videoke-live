@@ -76,7 +76,14 @@ html,body{margin:0;height:100%;background:#1a1033;color:#f5ecff;font:28px/1.3 sa
   var $ = function (i) { return document.getElementById(i); };
   var ws, room = '----', started = false, ready = false, player, curN = null, now = null, queue = [];
   var peers = {}, audios = {}, analysers = {}, voz = {}, musica = 100, hasRTC = !!(window.RTCPeerConnection || window.webkitRTCPeerConnection);
-  var ICE = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+  var ICE = {
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun2.l.google.com:19302' },
+      { urls: 'stun:stun.cloudflare.com:3478' }
+    ]
+  };
   var pendingIce = {};
   var singersList = [];
   var toastTimer = null;
@@ -92,13 +99,15 @@ html,body{margin:0;height:100%;background:#1a1033;color:#f5ecff;font:28px/1.3 sa
     return code;
   }
 
+  var CLOUD_WS_URL = 'wss://videoke-live.onrender.com/ws';
   var initialRoom = (location.search.match(/[?&]sala=([A-Za-z0-9]{4})/i) || [])[1];
   var customWs = (location.search.match(/[?&]ws=([^&]+)/i) || [])[1];
   if (customWs) customWs = decodeURIComponent(customWs);
 
   room = initialRoom ? initialRoom.toUpperCase() : generateLocalRoom();
-  var defaultWsProto = location.protocol === 'https:' ? 'wss://' : 'ws://';
-  var wsUrl = customWs || (defaultWsProto + location.host + '/ws');
+  var isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+  var defaultLocalWs = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws';
+  var wsUrl = customWs || (isLocal ? defaultLocalWs : CLOUD_WS_URL);
 
   function getSingUrl(r, lanHost) {
     var base = lanHost || location.origin;
@@ -582,9 +591,8 @@ html,body{margin:0;height:100%;background:#1a1033;color:#f5ecff;font:28px/1.3 sa
   function handleWsFailure() {
     wsFailures++;
     if (wsFailures >= 2) {
-      var isVercelOrStatic = location.hostname.indexOf('vercel.app') !== -1 || location.hostname.indexOf('github.io') !== -1;
-      if (isVercelOrStatic && !customWs) {
-        $('warn').textContent = '⚠️ Modo TV Estática (Vercel): Para os celulares adicionarem músicas e transmitirem áudio, inicie "node server.js" no computador ou informe ?ws=URL';
+      if (wsUrl === CLOUD_WS_URL) {
+        $('warn').textContent = '⚠️ Conectando ao servidor da nuvem (videoke-live.onrender.com). Aguarde alguns segundos enquanto o serviço inicializa...';
       } else {
         $('warn').textContent = '⚠️ Tentando conectar ao servidor WebSocket (' + wsUrl + ')...';
       }

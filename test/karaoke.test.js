@@ -62,16 +62,18 @@ describe('Servidor HTTP e Arquivos Estáticos', () => {
     assert.ok(text.includes('VIDEOKÊ') && text.includes('Abrir Palco na TV'));
   });
 
-  test('Rota /sing responde 200 com interface do microfone e suporte a gateway ?ws=', async () => {
+  test('Rota /sing responde 200 com interface do microfone, Multi-STUN e suporte a gateway ?ws=', async () => {
     const res = await fetch(`${baseUrl}/sing`);
     assert.equal(res.status, 200);
     assert.match(res.headers.get('content-type'), /text\/html/);
     const text = await res.text();
     assert.ok(text.includes('Entrar e ligar o microfone'));
     assert.ok(text.includes('customWs'), 'Deve aceitar gateway WebSocket customizado via ?ws=');
+    assert.ok(text.includes('stun.cloudflare.com'), 'Deve conter servidor STUN da Cloudflare para travessia NAT');
+    assert.ok(text.includes('CLOUD_WS_URL'), 'Deve conter fallback para gateway da nuvem');
   });
 
-  test('Rota /tv responde 200 com HTML da TV, QR Code Zero-Delay e suporte a gateway ?ws=', async () => {
+  test('Rota /tv responde 200 com HTML da TV, QR Code Zero-Delay, Multi-STUN e suporte a gateway ?ws=', async () => {
     const res = await fetch(`${baseUrl}/tv`);
     assert.equal(res.status, 200);
     assert.match(res.headers.get('content-type'), /text\/html/);
@@ -85,6 +87,8 @@ describe('Servidor HTTP e Arquivos Estáticos', () => {
     assert.ok(text.includes('createImgTag'), 'Deve priorizar createImgTag para compatibilidade total com Smart TVs');
     assert.ok(text.includes('generateLocalRoom'), 'Deve gerar sala local imediata para renderização Zero-Delay na Vercel');
     assert.ok(text.includes('customWs'), 'Deve aceitar parâmetro de gateway WebSocket ?ws=');
+    assert.ok(text.includes('stun.cloudflare.com'), 'Deve conter servidor STUN da Cloudflare para travessia NAT');
+    assert.ok(text.includes('CLOUD_WS_URL'), 'Deve conter fallback para gateway da nuvem');
   });
 
   test('Rota /vendor/qrcode.js responde 200 com JavaScript', async () => {

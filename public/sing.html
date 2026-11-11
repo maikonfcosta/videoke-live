@@ -102,9 +102,11 @@ $('go').onclick = async () => {
   track = stream.getAudioTracks()[0];
   localStorage.setItem('nome', $('name').value);
 
+  const CLOUD_WS_URL = 'wss://videoke-live.onrender.com/ws';
   const customWs = new URLSearchParams(location.search).get('ws');
-  const wsProto = location.protocol === 'https:' ? 'wss' : 'ws';
-  const wsUrl = customWs ? decodeURIComponent(customWs) : `${wsProto}://${location.host}/ws`;
+  const isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+  const defaultLocalWs = (location.protocol === 'https:' ? 'wss:' : 'ws:') + `//${location.host}/ws`;
+  const wsUrl = customWs ? decodeURIComponent(customWs) : (isLocal ? defaultLocalWs : CLOUD_WS_URL);
 
   try {
     ws = new WebSocket(wsUrl);
@@ -114,10 +116,11 @@ $('go').onclick = async () => {
 
   ws.onerror = () => {
     if ($('app').hidden) {
-      const isStatic = location.hostname.includes('vercel.app') || location.hostname.includes('github.io');
-      $('err').textContent = isStatic && !customWs
-        ? 'Servidor WebSocket não encontrado na Vercel (estático). O servidor backend precisa estar ativo no computador ("node server.js") ou apontar ?ws=URL'
-        : 'Falha ao conectar no servidor WebSocket (' + wsUrl + '). Verifique a rede.';
+      if (wsUrl === CLOUD_WS_URL) {
+        $('err').textContent = 'O servidor da nuvem está inicializando (Render Free Cold Start). Aguarde cerca de 30s e clique novamente.';
+      } else {
+        $('err').textContent = 'Falha ao conectar no servidor WebSocket (' + wsUrl + '). Verifique a rede.';
+      }
     }
   };
 
@@ -145,7 +148,14 @@ async function onMsg(m) {
     $('app').hidden = false;
     pendingIce = [];
 
-    pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+    pc = new RTCPeerConnection({
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun.cloudflare.com:3478' }
+      ]
+    });
     pc.onicecandidate = e => e.candidate && tx({ t: 'sig', data: { ice: e.candidate } });
 
     pc.onconnectionstatechange = () => {
