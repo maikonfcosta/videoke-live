@@ -62,15 +62,16 @@ describe('Servidor HTTP e Arquivos Estáticos', () => {
     assert.ok(text.includes('VIDEOKÊ') && text.includes('Abrir Palco na TV'));
   });
 
-  test('Rota /sing responde 200 com interface do microfone', async () => {
+  test('Rota /sing responde 200 com interface do microfone e suporte a gateway ?ws=', async () => {
     const res = await fetch(`${baseUrl}/sing`);
     assert.equal(res.status, 200);
     assert.match(res.headers.get('content-type'), /text\/html/);
     const text = await res.text();
     assert.ok(text.includes('Entrar e ligar o microfone'));
+    assert.ok(text.includes('customWs'), 'Deve aceitar gateway WebSocket customizado via ?ws=');
   });
 
-  test('Rota /tv responde 200 com HTML da TV e componentes do QR Code (Central e Flutuante)', async () => {
+  test('Rota /tv responde 200 com HTML da TV, QR Code Zero-Delay e suporte a gateway ?ws=', async () => {
     const res = await fetch(`${baseUrl}/tv`);
     assert.equal(res.status, 200);
     assert.match(res.headers.get('content-type'), /text\/html/);
@@ -78,11 +79,12 @@ describe('Servidor HTTP e Arquivos Estáticos', () => {
     const text = await res.text();
     assert.ok(text.includes('Videokê Live') || text.includes('TV'));
     assert.ok(text.includes('id="qr"'), 'Deve conter container do QR code central');
-    assert.ok(text.includes('qr-loading'), 'Deve conter indicador de carregamento inicial');
     assert.ok(text.includes('id="qr-corner"'), 'Deve conter badge flutuante para reprodução contínua');
     assert.ok(text.includes('id="qr-corner-box"'), 'Deve conter box do mini QR code');
     assert.ok(text.includes('buildQr'), 'Deve conter função geradora universal de QR code');
     assert.ok(text.includes('createImgTag'), 'Deve priorizar createImgTag para compatibilidade total com Smart TVs');
+    assert.ok(text.includes('generateLocalRoom'), 'Deve gerar sala local imediata para renderização Zero-Delay na Vercel');
+    assert.ok(text.includes('customWs'), 'Deve aceitar parâmetro de gateway WebSocket ?ws=');
   });
 
   test('Rota /vendor/qrcode.js responde 200 com JavaScript', async () => {

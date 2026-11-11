@@ -102,8 +102,24 @@ $('go').onclick = async () => {
   track = stream.getAudioTracks()[0];
   localStorage.setItem('nome', $('name').value);
 
+  const customWs = new URLSearchParams(location.search).get('ws');
   const wsProto = location.protocol === 'https:' ? 'wss' : 'ws';
-  ws = new WebSocket(`${wsProto}://${location.host}/ws`);
+  const wsUrl = customWs ? decodeURIComponent(customWs) : `${wsProto}://${location.host}/ws`;
+
+  try {
+    ws = new WebSocket(wsUrl);
+  } catch (e) {
+    return ($('err').textContent = 'Erro ao conectar WebSocket: ' + e.message);
+  }
+
+  ws.onerror = () => {
+    if ($('app').hidden) {
+      const isStatic = location.hostname.includes('vercel.app') || location.hostname.includes('github.io');
+      $('err').textContent = isStatic && !customWs
+        ? 'Servidor WebSocket não encontrado na Vercel (estático). O servidor backend precisa estar ativo no computador ("node server.js") ou apontar ?ws=URL'
+        : 'Falha ao conectar no servidor WebSocket (' + wsUrl + '). Verifique a rede.';
+    }
+  };
 
   ws.onopen = () => tx({ t: 'join', room: $('room').value.trim(), name: $('name').value.trim() });
   ws.onmessage = e => { chain = chain.then(() => onMsg(JSON.parse(e.data))).catch(console.error); };
