@@ -3,6 +3,7 @@
   "rewrites": [
     { "source": "/sing", "destination": "/sing.html" },
     { "source": "/tv", "destination": "/tv.html" },
-    { "source": "/vendor/qrcode.js", "destination": "/vendor/qrcode.js" }
+    { "source": "/vendor/qrcode.js", "destination": "/vendor/qrcode.js" },
+    { "source": "/favicon.ico", "destination": "/assets/favicon.svg" }
   ]
 }
