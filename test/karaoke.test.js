@@ -32,6 +32,42 @@ function waitForMessage(ws, predicate, timeout = 3000) {
   });
 }
 
+function collectMessages(ws) {
+  const queue = [];
+  const waiters = [];
+
+  ws.on('message', raw => {
+    try {
+      const msg = JSON.parse(raw.toString());
+      const idx = waiters.findIndex(w => !w.predicate || w.predicate(msg));
+      if (idx !== -1) {
+        const w = waiters.splice(idx, 1)[0];
+        clearTimeout(w.timer);
+        w.resolve(msg);
+      } else {
+        queue.push(msg);
+      }
+    } catch (e) {}
+  });
+
+  return function nextMessage(predicate, timeout = 3000) {
+    for (let i = 0; i < queue.length; i++) {
+      if (!predicate || predicate(queue[i])) {
+        return Promise.resolve(queue.splice(i, 1)[0]);
+      }
+    }
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        const idx = waiters.indexOf(entry);
+        if (idx !== -1) waiters.splice(idx, 1);
+        reject(new Error(`Timeout (${timeout}ms) aguardando mensagem coletada`));
+      }, timeout);
+      const entry = { predicate, resolve, timer };
+      waiters.push(entry);
+    });
+  };
+}
+
 before(async () => {
   await new Promise((resolve, reject) => {
     server.listen(0, () => {
@@ -95,6 +131,16 @@ describe('Servidor HTTP e Arquivos Estáticos', () => {
     const res = await fetch(`${baseUrl}/vendor/qrcode.js`);
     assert.equal(res.status, 200);
     assert.match(res.headers.get('content-type'), /text\/javascript/);
+  });
+
+  test('Rota de assets responde com MIME type correto para imagens SVG e GIF', async () => {
+    const resSvg = await fetch(`${baseUrl}/assets/favicon.svg`);
+    assert.equal(resSvg.status, 200);
+    assert.equal(resSvg.headers.get('content-type'), 'image/svg+xml');
+
+    const resGif = await fetch(`${baseUrl}/assets/demo.gif`);
+    assert.equal(resGif.status, 200);
+    assert.equal(resGif.headers.get('content-type'), 'image/gif');
   });
 
   test('Rota inexistente responde 404', async () => {
@@ -228,7 +274,7 @@ describe('Cenários de Aceitação do Karaokê Web', () => {
     // Fecha a TV
     tvWs.close();
 
-    const byeMsg = await waitForMessage(phoneWs, m => m.t === 'bye');
+    const byeMsg = await waitForMessage(phoneWs, m => m.t === 'bye', 3500);
     assert.equal(byeMsg.t, 'bye');
     assert.equal(rooms.has(roomMsg.room), false, 'Sala deve ser removida do mapa');
 
@@ -311,6 +357,63 @@ describe('Cenários de Aceitação do Karaokê Web', () => {
     assert.equal(stateNext.now.title, 'Como Nossos Pais');
 
     tvWs.close();
+    phoneWs.close();
+  });
+
+  test('Cenário 8: TV solicita código específico de sala e backend preserva a sala', async () => {
+    const tvWs = new WebSocket(wsUrl);
+    await new Promise(resolve => tvWs.on('open', resolve));
+
+    tvWs.send(JSON.stringify({ t: 'host', room: 'KARA' }));
+    const roomMsg = await waitForMessage(tvWs, m => m.t === 'room');
+    assert.equal(roomMsg.room, 'KARA', 'Backend deve honrar o código de sala solicitado pela TV');
+
+    tvWs.close();
+  });
+
+  test('Cenário 9: Reconexão da TV dentro do grace period restaura a sala e preserva a fila', async () => {
+    const tvWs1 = new WebSocket(wsUrl);
+    await new Promise(resolve => tvWs1.on('open', resolve));
+    tvWs1.send(JSON.stringify({ t: 'host', room: 'RECO' }));
+    await waitForMessage(tvWs1, m => m.t === 'room');
+
+    const phoneWs = new WebSocket(wsUrl);
+    await new Promise(resolve => phoneWs.on('open', resolve));
+    phoneWs.send(JSON.stringify({ t: 'join', room: 'RECO', name: 'Cantor Fiel' }));
+    await waitForMessage(phoneWs, m => m.t === 'joined');
+
+    const roomObj = rooms.get('RECO');
+    roomObj.queue.push({ n: 10, vid: 'vid99999999', title: 'Música Salva', by: 'Cantor Fiel' });
+
+    // Queda repentina da TV (socket fecha)
+    tvWs1.close();
+
+    // Celular NÃO deve receber "bye" imediatamente devido ao grace period
+    let receivedBye = false;
+    phoneWs.on('message', raw => {
+      try {
+        const m = JSON.parse(raw.toString());
+        if (m.t === 'bye') receivedBye = true;
+      } catch (e) {}
+    });
+
+    await new Promise(r => setTimeout(r, 200));
+    assert.equal(receivedBye, false, 'Celular não deve ser expulso imediatamente em oscilações de rede');
+
+    // TV reconecta com o mesmo código de sala
+    const tvWs2 = new WebSocket(wsUrl);
+    await new Promise(resolve => tvWs2.on('open', resolve));
+    const nextTvMsg = collectMessages(tvWs2);
+    tvWs2.send(JSON.stringify({ t: 'host', room: 'RECO' }));
+
+    const reconnMsg = await nextTvMsg(m => m.t === 'room');
+    assert.equal(reconnMsg.room, 'RECO');
+
+    const snapMsg = await nextTvMsg(m => m.t === 'state');
+    assert.equal(snapMsg.queue.length, 1);
+    assert.equal(snapMsg.queue[0].title, 'Música Salva');
+
+    tvWs2.close();
     phoneWs.close();
   });
 });

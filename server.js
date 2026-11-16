@@ -25,6 +25,8 @@ const FILES = {
   '/vendor/qrcode.js': ['public/vendor/qrcode.js', 'text/javascript'],
 };
 
+const TV_GRACE_PERIOD_MS = process.env.TV_GRACE_PERIOD ? Number(process.env.TV_GRACE_PERIOD) : 1000;
+
 const server = http.createServer((req, res) => {
   const urlPath = req.url.split('?')[0];
 
@@ -41,7 +43,16 @@ const server = http.createServer((req, res) => {
     const assetPath = path.join(__dirname, 'public/assets', assetFile);
     if (fs.existsSync(assetPath)) {
       const ext = path.extname(assetFile).toLowerCase();
-      const mime = ext === '.svg' ? 'image/svg+xml' : 'application/octet-stream';
+      const MIMES = {
+        '.svg': 'image/svg+xml',
+        '.gif': 'image/gif',
+        '.png': 'image/png',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.webp': 'image/webp',
+        '.ico': 'image/x-icon'
+      };
+      const mime = MIMES[ext] || 'application/octet-stream';
       res.writeHead(200, {
         'Content-Type': mime,
         'Cache-Control': 'public, max-age=86400',
@@ -119,6 +130,8 @@ const title = async vid => {
 
 wss.on('connection', ws => {
   let room, id, tv = false;
+  ws.isAlive = true;
+  ws.on('pong', () => { ws.isAlive = true; });
 
   ws.on('message', raw => {
     let m;
@@ -130,10 +143,34 @@ wss.on('connection', ws => {
 
     if (!room) {
       if (m.t === 'host') {
+        const reqRoom = typeof m.room === 'string' && /^[A-Z0-9]{4}$/i.test(m.room.trim())
+          ? m.room.trim().toUpperCase()
+          : null;
+
+        // Se a TV já estava na sala e reconectou durante o grace period
+        if (reqRoom && rooms.has(reqRoom)) {
+          const existing = rooms.get(reqRoom);
+          if (existing.tvDisconnectTimer) {
+            clearTimeout(existing.tvDisconnectTimer);
+            existing.tvDisconnectTimer = null;
+          }
+          existing.tv = ws;
+          room = existing;
+          tv = true;
+          const currentPort = server.address() ? server.address().port : PORT;
+          send(ws, { t: 'room', room: existing.code, lanIp: getLanIp(), port: currentPort });
+          send(ws, snap(room));
+          return;
+        }
+
         let code;
-        do {
-          code = Array.from({ length: 4 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ'[Math.floor(Math.random() * 24)]).join('');
-        } while (rooms.has(code));
+        if (reqRoom && !rooms.has(reqRoom)) {
+          code = reqRoom;
+        } else {
+          do {
+            code = Array.from({ length: 4 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ'[Math.floor(Math.random() * 24)]).join('');
+          } while (rooms.has(code));
+        }
 
         room = {
           code,
@@ -141,7 +178,8 @@ wss.on('connection', ws => {
           phones: new Map(),
           queue: [],
           now: null,
-          musicaVol: 1
+          musicaVol: 1,
+          tvDisconnectTimer: null
         };
         tv = true;
         rooms.set(code, room);
@@ -231,9 +269,17 @@ wss.on('connection', ws => {
   ws.on('close', () => {
     if (!room) return;
     if (tv) {
-      if (room.scoreTimer) clearTimeout(room.scoreTimer);
-      rooms.delete(room.code);
-      room.phones.forEach(p => send(p, { t: 'bye' }));
+      if (room.scoreTimer) {
+        clearTimeout(room.scoreTimer);
+        room.scoreTimer = null;
+      }
+      // Grace period para permitir reconexão da TV em oscilações temporárias de Wi-Fi
+      if (room.tvDisconnectTimer) clearTimeout(room.tvDisconnectTimer);
+      room.tvDisconnectTimer = setTimeout(() => {
+        rooms.delete(room.code);
+        room.phones.forEach(p => send(p, { t: 'bye' }));
+      }, TV_GRACE_PERIOD_MS);
+      if (room.tvDisconnectTimer.unref) room.tvDisconnectTimer.unref();
     } else {
       room.phones.delete(id);
       send(room.tv, { t: 'left', id });
@@ -244,6 +290,8 @@ wss.on('connection', ws => {
 
 const pingInterval = setInterval(() => {
   wss.clients.forEach(c => {
+    if (c.isAlive === false) return c.terminate();
+    c.isAlive = false;
     if (c.readyState === 1) c.ping();
   });
 }, 30000);

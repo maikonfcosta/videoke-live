@@ -68,9 +68,11 @@ const showToast = msg => {
   toastTimeout = setTimeout(() => { t.style.display = 'none'; }, 6000);
 };
 
-const ytId = s => (s.match(/(?:youtu\.be\/|v=|embed\/|shorts\/)([\w-]{11})/) || s.trim().match(/^([\w-]{11})$/) || [])[1];
+const ytId = s => (s.match(/(?:youtu\.be\/|v=|embed\/|shorts\/|live\/)([\w-]{11})/) || s.trim().match(/^([\w-]{11})$/) || [])[1];
 $('room').value = (new URLSearchParams(location.search).get('sala') || '').toUpperCase();
 $('name').value = localStorage.getItem('nome') || '';
+
+let reconnectTimer = null;
 
 async function acquireWakeLock() {
   if ('wakeLock' in navigator) {
@@ -85,6 +87,55 @@ document.addEventListener('visibilitychange', () => {
     acquireWakeLock();
   }
 });
+
+function connectSocket() {
+  const CLOUD_WS_URL = 'wss://videoke-live.onrender.com/ws';
+  const customWs = new URLSearchParams(location.search).get('ws');
+  const isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+  const defaultLocalWs = (location.protocol === 'https:' ? 'wss:' : 'ws:') + `//${location.host}/ws`;
+  const wsUrl = customWs ? decodeURIComponent(customWs) : (isLocal ? defaultLocalWs : CLOUD_WS_URL);
+
+  try {
+    ws = new WebSocket(wsUrl);
+  } catch (e) {
+    if ($('app').hidden) {
+      $('err').textContent = 'Erro ao conectar WebSocket: ' + e.message;
+    }
+    return;
+  }
+
+  ws.onerror = () => {
+    if ($('app').hidden) {
+      if (wsUrl === CLOUD_WS_URL) {
+        $('err').textContent = 'O servidor da nuvem está inicializando (Render Free Cold Start). Aguarde cerca de 30s e clique novamente.';
+      } else {
+        $('err').textContent = 'Falha ao conectar no servidor WebSocket (' + wsUrl + '). Verifique a rede.';
+      }
+    }
+  };
+
+  ws.onopen = () => {
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+    tx({ t: 'join', room: $('room').value.trim(), name: $('name').value.trim() });
+  };
+
+  ws.onmessage = e => { chain = chain.then(() => onMsg(JSON.parse(e.data))).catch(console.error); };
+
+  ws.onclose = () => {
+    if (!$('app').hidden) {
+      $('rtc-status').textContent = '⚠ Conexão perdida com a TV. Reconectando...';
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      reconnectTimer = setTimeout(() => {
+        if (!$('app').hidden) connectSocket();
+      }, 3000);
+    } else {
+      if (track) track.stop();
+    }
+  };
+}
 
 $('go').onclick = async () => {
   $('err').textContent = '';
@@ -102,35 +153,7 @@ $('go').onclick = async () => {
   track = stream.getAudioTracks()[0];
   localStorage.setItem('nome', $('name').value);
 
-  const CLOUD_WS_URL = 'wss://videoke-live.onrender.com/ws';
-  const customWs = new URLSearchParams(location.search).get('ws');
-  const isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
-  const defaultLocalWs = (location.protocol === 'https:' ? 'wss:' : 'ws:') + `//${location.host}/ws`;
-  const wsUrl = customWs ? decodeURIComponent(customWs) : (isLocal ? defaultLocalWs : CLOUD_WS_URL);
-
-  try {
-    ws = new WebSocket(wsUrl);
-  } catch (e) {
-    return ($('err').textContent = 'Erro ao conectar WebSocket: ' + e.message);
-  }
-
-  ws.onerror = () => {
-    if ($('app').hidden) {
-      if (wsUrl === CLOUD_WS_URL) {
-        $('err').textContent = 'O servidor da nuvem está inicializando (Render Free Cold Start). Aguarde cerca de 30s e clique novamente.';
-      } else {
-        $('err').textContent = 'Falha ao conectar no servidor WebSocket (' + wsUrl + '). Verifique a rede.';
-      }
-    }
-  };
-
-  ws.onopen = () => tx({ t: 'join', room: $('room').value.trim(), name: $('name').value.trim() });
-  ws.onmessage = e => { chain = chain.then(() => onMsg(JSON.parse(e.data))).catch(console.error); };
-  ws.onclose = () => {
-    if (!$('app').hidden) $('now').textContent = 'Desconectado da TV. Recarregue a página.';
-    if (track) track.stop();
-  };
-
+  connectSocket();
   acquireWakeLock();
 };
 
@@ -209,6 +232,7 @@ async function onMsg(m) {
   } else if (m.t === 'alert') {
     showToast(m.msg);
   } else if (m.t === 'bye') {
+    if (reconnectTimer) clearTimeout(reconnectTimer);
     if (track) track.stop();
     location.reload();
   }

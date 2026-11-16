@@ -219,37 +219,43 @@ html,body{margin:0;height:100%;background:#1a1033;color:#f5ecff;font:28px/1.3 sa
       if (!now) return;
       totalSamples++;
 
-      var activeAnalyser = null;
-      for (var id in analysers) {
-        if (analysers[id]) {
-          activeAnalyser = analysers[id];
-          break;
-        }
-      }
-
-      if (!activeAnalyser) return;
-
-      var bufferLength = activeAnalyser.frequencyBinCount;
-      var dataArray = new Uint8Array(bufferLength);
-      activeAnalyser.getByteFrequencyData(dataArray);
-
-      var sum = 0;
-      var peakVal = 0;
+      var totalEnergy = 0;
+      var anyActive = false;
+      var maxPeak = 0;
       var peakIdx = 0;
-      for (var i = 0; i < bufferLength; i++) {
-        var val = dataArray[i];
-        sum += val;
-        if (val > peakVal) {
-          peakVal = val;
-          peakIdx = i;
+      var analyserCount = 0;
+
+      for (var id in analysers) {
+        var an = analysers[id];
+        if (!an) continue;
+        analyserCount++;
+
+        var bufferLength = an.frequencyBinCount;
+        var dataArray = new Uint8Array(bufferLength);
+        an.getByteFrequencyData(dataArray);
+
+        var sum = 0;
+        for (var i = 0; i < bufferLength; i++) {
+          var val = dataArray[i];
+          sum += val;
+          if (val > maxPeak) {
+            maxPeak = val;
+            peakIdx = i;
+          }
+        }
+        var avgEnergy = sum / bufferLength;
+        totalEnergy += avgEnergy;
+        if (avgEnergy > 12) {
+          anyActive = true;
         }
       }
 
-      var avgEnergy = sum / bufferLength;
-      volumeSum += avgEnergy;
+      if (analyserCount === 0) return;
 
-      // Limiar de detecção vocal
-      if (avgEnergy > 12) {
+      var combinedEnergy = totalEnergy / analyserCount;
+      volumeSum += combinedEnergy;
+
+      if (anyActive) {
         activeVoiceSamples++;
         if (Math.abs(peakIdx - lastFreqPeak) > 2) {
           freqVarianceCount++;
@@ -493,17 +499,22 @@ html,body{margin:0;height:100%;background:#1a1033;color:#f5ecff;font:28px/1.3 sa
       }
       delete audios[id];
     }
-    delete analysers[id];
+    if (analysers[id]) {
+      try { analysers[id].disconnect(); } catch (e) {}
+      delete analysers[id];
+    }
     delete pendingIce[id];
   }
 
   var on = {
     room: function (m) {
+      if (room !== m.room) {
+        now = null;
+        queue = [];
+        singersList = [];
+        for (var id in peers) drop(id);
+      }
       room = m.room;
-      now = null;
-      queue = [];
-      singersList = [];
-      for (var id in peers) drop(id);
 
       var hostUrl = location.origin;
       if ((location.hostname === 'localhost' || location.hostname === '127.0.0.1') && m.lanIp) {
@@ -611,7 +622,7 @@ html,body{margin:0;height:100%;background:#1a1033;color:#f5ecff;font:28px/1.3 sa
     ws.onopen = function () {
       wsFailures = 0;
       $('warn').textContent = hasRTC ? '' : 'Esta TV não suporta voz pelo navegador (sem WebRTC). A música funciona.';
-      tx({ t: 'host' });
+      tx({ t: 'host', room: room });
     };
     ws.onmessage = function (e) {
       try {
